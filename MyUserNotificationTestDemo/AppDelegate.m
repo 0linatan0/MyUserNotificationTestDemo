@@ -7,6 +7,7 @@
 //
 
 #import "AppDelegate.h"
+#import <UserNotifications/UserNotifications.h>
 
 @interface AppDelegate ()
 
@@ -17,6 +18,31 @@
 
 - (BOOL)application:(UIApplication *)application didFinishLaunchingWithOptions:(NSDictionary *)launchOptions {
     // Override point for customization after application launch.
+    
+    UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
+    [center requestAuthorizationWithOptions:(UNAuthorizationOptionAlert + UNAuthorizationOptionSound)
+                          completionHandler:^(BOOL granted, NSError * _Nullable error) {
+                              if(!error)
+                              {
+                                  NSLog(@"@授权成功");
+                              }
+                          }];
+    
+    [center getNotificationSettingsWithCompletionHandler:^(UNNotificationSettings * _Nonnull settings) {
+        NSLog(@"%@",settings);
+    }];
+    
+    NSDictionary *remoteUserInfo = launchOptions[UIApplicationLaunchOptionsRemoteNotificationKey];
+    if (remoteUserInfo) {
+        NSLog(@"remoteUserInfo:%@",remoteUserInfo);
+        //APP未启动，点击推送消息，iOS10下还是跟以前一样在此获取
+    }
+    center.delegate = self;
+    
+    [self setUpCategory];
+    
+    [[UIApplication sharedApplication] registerForRemoteNotifications];
+    
     return YES;
 }
 
@@ -47,5 +73,50 @@
     // Called when the application is about to terminate. Save data if appropriate. See also applicationDidEnterBackground:.
 }
 
+- (void)application:(UIApplication *)application didRegisterForRemoteNotificationsWithDeviceToken:(nonnull NSData *)deviceToken
+{
+    NSLog(@"deviceToken:%@",deviceToken);
+    NSString *deviceTokenStr = [[[[deviceToken description]
+                                 stringByReplacingOccurrencesOfString:@"<" withString:@""]
+                                stringByReplacingOccurrencesOfString:@">" withString:@""]
+                               stringByReplacingOccurrencesOfString:@" " withString:@""];
+    NSLog(@"deviceTokenStr:%@",deviceTokenStr);
+}
+
+- (void)application:(UIApplication *)application didFailToRegisterForRemoteNotificationsWithError:(NSError *)error{
+    NSLog(@"didFailToRegisterForRemoteNotificationsWithError:%@",error);
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center willPresentNotification:(UNNotification *)notification withCompletionHandler:(void (^)(UNNotificationPresentationOptions))completionHandler{
+    NSLog(@"willPresentNotification:%@",notification.request.content.title);
+    
+    // 这里真实需要处理交互的地方
+    // 获取通知所带的数据
+    NSString *apsContent = [notification.request.content.userInfo objectForKey:@"aps"];
+    NSLog(@"%@",apsContent);
+}
+
+- (void)userNotificationCenter:(UNUserNotificationCenter *)center didReceiveNotificationResponse:(UNNotificationResponse *)response withCompletionHandler:(void (^)())completionHandler{
+    //在没有启动本App时，收到服务器推送消息，下拉消息会有快捷回复的按钮，点击按钮后调用的方法，根据identifier来判断点击的哪个按钮
+    NSString *apsContent = [response.notification.request.content.userInfo objectForKey:@"aps"];
+    NSLog(@"didReceiveNotificationResponse:%@",response.notification.request.content.title);
+    NSLog(@"%@",apsContent);
+}
+
+//远程推送APP在前台
+- (void)application:(UIApplication *)application didReceiveRemoteNotification:(NSDictionary *)userInfo fetchCompletionHandler:(void (^)(UIBackgroundFetchResult))completionHandler{
+    NSLog(@"didReceiveRemoteNotification:%@",userInfo);
+}
+
+- (void)setUpCategory
+{
+    UNNotificationAction *action1 = [UNNotificationAction actionWithIdentifier:@"enterApp" title:@"进入应用" options:UNNotificationActionOptionForeground];
+    
+    UNNotificationAction *action2 = [UNNotificationAction actionWithIdentifier:@"destructive" title:@"忽略" options:UNNotificationActionOptionDestructive];
+    
+    UNNotificationCategory *category = [UNNotificationCategory categoryWithIdentifier:@"helloIdentifier" actions:@[action1,action2] minimalActions:@[action1,action2] intentIdentifiers:@[] options:UNNotificationCategoryOptionNone];
+    
+    [[UNUserNotificationCenter currentNotificationCenter] setNotificationCategories:[NSSet setWithObjects:category, nil]];
+}
 
 @end
